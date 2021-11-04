@@ -25,6 +25,7 @@ import yfinance as yf
 import seaborn as sns
 import matplotlib.pyplot as plt
 import datetime
+import numpy as np
 
 def updateCurrentPrice():
     with conn:
@@ -51,19 +52,35 @@ def showAllFinanceState():
         if numData:
             allBeginningValue = cur.execute("select sum(BeginningValue) from AllFinanceState").fetchone()[0]
             allCurrentValue = cur.execute("select sum(CurrentValue) from AllFinanceState").fetchone()[0]
-            profitLost = (allBeginningValue - allCurrentValue) / allBeginningValue
-            print(f"損益率: {profitLost:.2f}%")
+            # print("all current value: ", allCurrentValue, "\nall beginning value: ", allBeginningValue)
+            profitLost = (allCurrentValue - allBeginningValue) / allBeginningValue
+            percentage = "{:.0%}".format(round(profitLost, 4))
+            print(f"損益率: {percentage}")
 
             stocks = []
-            for data in cur.execute("select Name from AllFinanceState"):
-                stocks.append(str(data[0]))
-            allValue = cur.execute("select sum(CurrentValue) from AllFinanceState").fetchone()[0]
             sizes = []
-            for data in cur.execute("select CurrentValue from AllFinanceState"):
-                sizes.append(data[0]/allValue)
-            fig1, ax1 = plt.subplots()
-            ax1.pie(sizes, labels=stocks, autopct='%1.1f%%', shadow=True, startangle=90)
-            ax1.axis('equal')
+            currentValue = []
+            allValue = cur.execute("select sum(CurrentValue) from AllFinanceState").fetchone()[0]
+            for data in cur.execute("select * from AllFinanceState"):
+                stocks.append(data[1])
+                currentValue.append(data[5])
+                sizes.append(data[5]/allValue)
+            print(stocks)
+            fig, ax1 = plt.subplots(3)
+            fig.suptitle('123')
+            ax1[0].pie(sizes, labels=stocks, autopct='%1.1f%%', shadow=True, startangle=90)
+            
+            ax1[0].axis('equal')
+            x = np.arange(len(stocks))
+            ax1[1].bar(x, currentValue)
+            ax1[1].set_xticks(x)
+            ax1[1].set_xticklabels(stocks)
+            for i, v in enumerate(currentValue):
+                ax1[1].text(v, i, str(v), color='blue', fontweight='bold')
+            ax1[1].set_xlabel('stock name')
+            ax1[1].set_ylabel('current value')
+            ax1[1].set_title('current value of all stocks')
+
             plt.show()
         else:
             print("you have no stock to show")
@@ -104,9 +121,9 @@ def addStockRecord():
         currentValue = currentPrice * numShares
 
         beginningValue = beginningPrice * numShares
-        cur.execute(f"insert into TW{stockName}"
-                    "(Date, NumberOfShares, BeginningPrice, BeginningValue, CurrentValue)"
-                    f"values (datetime('now'), {numShares}, round({beginningPrice}, 3), round({beginningValue}, 3), round({currentValue, 3}))")
+        cur.execute(f"insert into TW{stockName} "
+                    "(Date, NumberOfShares, BeginningPrice, BeginningValue, CurrentValue) "
+                    f"values (datetime('now'), {numShares}, round({beginningPrice}, 3), round({beginningValue}, 3), round({currentValue}, 3))")
     # update the stock state in AllFinanceState
     with conn:
         stockNumShares = stockNumShares + numShares
