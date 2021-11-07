@@ -20,11 +20,13 @@
 6. CurrentValue >> the current value of all shares
 """
 
-from os import lseek
 import sqlite3
 import yfinance as yf
 import matplotlib.pyplot as plt
 import pandas as pd
+import datetime
+import plotly.graph_objects as go
+from tabulate import tabulate
 
 def updateCurrentPrice():
     with conn:
@@ -38,15 +40,17 @@ def updateCurrentPrice():
                         f"CurrentPrice = {currentPrice}, "
                         f"CurrentValue = {currentValue} "
                         f"where ID = {id}")
-            
 
 def showAllFinanceState():
     with conn:
         updateCurrentPrice()
         numData = 0
+        data = cur.execute("select * from AllFinanceState")
+        print("[ID, Name, Num(shares), Current Price, Beginning Value, Current Value]")
+        print(tabulate(data))
         for data in cur.execute("select * from AllFinanceState"):
             numData+=1
-            print(data)
+            # print("     ",tabulate(data))
         
         if numData:
             allBeginningValue = cur.execute("select sum(BeginningValue) from AllFinanceState").fetchone()[0]
@@ -54,7 +58,7 @@ def showAllFinanceState():
             # print("all current value: ", allCurrentValue, "\nall beginning value: ", allBeginningValue)
             profitLost = (allCurrentValue - allBeginningValue) / allBeginningValue
             percentage = "{:.0%}".format(round(profitLost, 4))
-            print(f"損益率: {percentage}")
+            print(f"     損益率: {percentage}")
 
             stocks = []
             currentValue = []
@@ -68,8 +72,8 @@ def showAllFinanceState():
                 currentValue.append(data[5])
                 currentProfitLost.append(round((data[5] - data[4])/data[4]*100, 2))
                 valuePercentage.append(data[5]/allValue)
-            print(stocks)
-            print(currentProfitLost)
+            # print("        ",stocks)
+            # print("        ",currentProfitLost)
             fig, ax1 = plt.subplots(2)
             fig.suptitle('All Finance State')
             ax1[0].pie(valuePercentage, labels=stocks, autopct='%1.1f%%', shadow=True, startangle=90)
@@ -91,11 +95,15 @@ def showAllFinanceState():
                 if height < minHeight:
                     minHeight = height
                 x, y = p.get_xy()
-                print(height)
-                if height > 0:
+                if height >= 15:
                     ax1[1].annotate(f'{height}%', (x + width/2, y + height*0.8), ha='center', color='white')
-                elif height <= 0:
+                elif height <= -15:
                     ax1[1].annotate(f'{height}%', (x + width/2, y + height*0.2), ha='center', color='white')
+                elif (height >= 0) and (height < 15):
+                    ax1[1].annotate(f'{height}%', (x + width/2, y), ha='center', color='white')
+                elif (height <= 0) and (height > -15):
+                    ax1[1].annotate(f'{height}%', (x + width/2, y), ha='center', color='white')
+
             # set the height of bar chart
             # ax1[1].set_ylim(minHeight - 0.3, maxHeight + 0.3)
             ax1[1].set_xlabel('stock name')
@@ -104,11 +112,18 @@ def showAllFinanceState():
 
             plt.show()
         else:
-            print("you have no stock to show")
+            print("     you have no stock to show")
 
+def showStockBuyingRecord():
+    stockName=str(input("     input the name of Stock: "))
+    updateCurrentPrice()
+    print("[ID, Date, Num(shares), Beginning Price, Beginning Value, Current Value]")
+    with conn:
+        data=cur.execute(f"select * from TW{stockName}")
+        print(tabulate(data))
 
 def addStockRecord():
-    stockName = str(input("Please input the name of the stock: "))
+    stockName = str(input("     Please input the name of the stock: "))
     cmd = f"""create table if not exists TW{stockName} 
             (ID  integer primary key,
             Date text,
@@ -122,7 +137,7 @@ def addStockRecord():
     # testing
     with conn:
         if cur.execute(f"select * from AllFinanceState where Name = '{stockName}'") != 1:
-            print("this stock does not exist")
+            print("     this stock does not exist")
             stockList.append(f"{stockName}")
         cur.execute(f"insert or ignore into AllFinanceState (Name, NumberOfShares) values ('{stockName}', 0)")
         stockInfo = cur.execute(f"select * from AllFinanceState where Name = '{stockName}'").fetchone()
@@ -132,12 +147,12 @@ def addStockRecord():
         # print("this stock already exists")
         stockNumShares = stockInfo[2]
 
-        print("shares: ", stockNumShares)
+        print("     shares: ", stockNumShares)
 
     # add new record into the table of this stock
     with conn:
-        numShares = int(input("Please input the number of shares: "))
-        beginningPrice = float(input("Please input the beginning price: "))
+        numShares = int(input("     Please input the number of shares: "))
+        beginningPrice = float(input("     Please input the beginning price: "))
         currentPrice = yf.Ticker(f"{stockName}.TW").history()['Close'][0]
         currentValue = currentPrice * numShares
 
@@ -152,7 +167,7 @@ def addStockRecord():
         stockBeginningValue = cur.execute("select sum(BeginningValue)"
                                         f"from TW{stockName}").fetchone()[0]
         stockCurentValue = stockCurrentPrice * stockNumShares
-        print("price: ", stockCurrentPrice, "\nvalue: ", stockBeginningValue, "\n")
+        print("     price: ", stockCurrentPrice, "\n     value: ", stockBeginningValue, "\n")
         cur.execute(f"update AllFinanceState set NumberOfShares = {stockNumShares}, "
                     f"CurrentPrice =  round({stockCurrentPrice}, 3), "
                     f"BeginningValue =  round({stockBeginningValue}, 3), "
@@ -161,13 +176,21 @@ def addStockRecord():
 
 def showGrowthOfValueOfSpecificStock():
     #date = yf.Ticker("0050.TW").history(period='1mo')["Date"]
-    priceData = yf.Ticker("0050.TW").history(period='1mo')["Close"]
-    #sns.lineplot(data=priceData)
-    #sns.set_theme()
-    plt.plot(priceData)
-    plt.xticks(rotation=30)
-    plt.show()
-    print()
+    stockName=str(input("     Please input the number of the stock you want to watch: "))
+    print("     Please input the Start Time:")
+    year=int(input("     Enter the Year: "))
+    month=int(input("     Enter the Month: "))
+    date=int(input("     Enter the Date: "))
+    priceData = yf.Ticker(f"{stockName}.TW").history(start=datetime.datetime(year, month, date), end=datetime.datetime.now())
+    priceData.to_csv(f'{stockName}.csv')
+    with open(f'{stockName}.csv', newline='') as csvfile:
+        priceData=pd.read_csv(f'{stockName}.csv')
+        fig = go.Figure(data=go.Ohlc(x=priceData['Date'],
+                    open=priceData['Open'],
+                    high=priceData['High'],
+                    low=priceData['Low'],
+                    close=priceData['Close']))
+    fig.show()
 
 def deleteAllRecord():
     with conn:
@@ -184,10 +207,9 @@ def deleteAllRecord():
                 unique(ID, Name)
                 )""")
 
-
 ############## Main Code ##############
 stockList = [] # this list used for delete all records
-conn = sqlite3.connect('test002.db')
+conn = sqlite3.connect('yourFinance.db')
 cur = conn.cursor()
 conn.execute("""create table if not exists AllFinanceState 
                 (ID integer primary key,
@@ -198,22 +220,29 @@ conn.execute("""create table if not exists AllFinanceState
                 CurrentValue float,
                 unique(ID, Name)
                 )""")
-
+print("options(1, 2, 3, 4, 8, 9)\n",
+        "  =(Show all your finance state,\n",
+        "  Show a specific stock buying record,\n",
+        "  Show the growth of a specific stock,\n",
+        "  Add new Stock Buying Record,\n",
+        "  Deleting all data,\n",
+        "  Leaving this application)\n")
 op = int(input("select your option at Mainmenu: "))
 while op >= 1:
     
     if op == 1:
         showAllFinanceState()
     elif op == 2:
-        addStockRecord()
+        showStockBuyingRecord()
     elif op == 3:
         showGrowthOfValueOfSpecificStock()
     elif op == 4:
-        data = pd.DataReader
+        addStockRecord()
     elif op == 8:
+        print("     Deleting Data...")
         deleteAllRecord()
     elif op == 9:
-        print("leaving")
+        print("     Leaving...")
         break
     print("####################")
     op = int(input("select your option at Mainmenu: "))
