@@ -174,6 +174,27 @@ def addStockRecord():
                     f"CurrentValue = round({stockCurentValue}, 3) "
                     f"where ID = {stockID}")
 
+def deletStockRecord():
+    stockName = str(input("     Please input the name of the stock: "))
+    id = int(input("     Please input the id of the record: "))
+    with conn:
+        cur.execute(f"delete from TW{stockName} where ID = {id}")
+        # update the stock state in AllFinanceState
+        stockID = cur.execute(f"select ID from AllFinanceState where Name = '{stockName}'").fetchone()[0]
+        stockNumShares = cur.execute("select sum(NumberOfShares)"
+                                        f"from TW{stockName}").fetchone()[0]
+        stockCurrentPrice = yf.Ticker(f"{stockName}.TW").history(period="1d")['Close'][0]
+        stockBeginningValue = cur.execute("select sum(BeginningValue)"
+                                        f"from TW{stockName}").fetchone()[0]
+        stockCurentValue = stockCurrentPrice * stockNumShares
+        print("     price: ", stockCurrentPrice, "\n     value: ", stockBeginningValue, "\n")
+        cur.execute(f"update AllFinanceState set NumberOfShares = {stockNumShares}, "
+                    f"CurrentPrice = round({stockCurrentPrice}, 3), "
+                    f"BeginningValue = round({stockBeginningValue}, 3), "
+                    f"CurrentValue = round({stockCurentValue}, 3) "
+                    f"where ID = {stockID}")
+    
+
 def showGrowthOfValueOfSpecificStock():
     #date = yf.Ticker("0050.TW").history(period='1mo')["Date"]
     stockName=str(input("     Please input the number of the stock you want to watch: "))
@@ -220,11 +241,12 @@ conn.execute("""create table if not exists AllFinanceState
                 CurrentValue float,
                 unique(ID, Name)
                 )""")
-print("options(1, 2, 3, 4, 8, 9)\n",
+print("options(1, 2, 3, 4, 5, 8, 9)\n",
         "  =(Show all your finance state,\n",
         "  Show a specific stock buying record,\n",
         "  Show the growth of a specific stock,\n",
         "  Add new Stock Buying Record,\n",
+        "  Delete specific Stock Buying Record,\n",
         "  Deleting all data,\n",
         "  Leaving this application)\n")
 op = int(input("select your option at Mainmenu: "))
@@ -238,6 +260,8 @@ while op >= 1:
         showGrowthOfValueOfSpecificStock()
     elif op == 4:
         addStockRecord()
+    elif op == 5:
+        deletStockRecord()
     elif op == 8:
         print("     Deleting Data...")
         deleteAllRecord()
